@@ -27,7 +27,8 @@ nent Analysis first map the input data to a lower-dimensional space and then try
 reconstruct it again without losing the main information.
 
 ## Models for online settings
-In the online settings, the time series data are divided into fixed-sized segments, and each segment is seen as an exmple
+In the online settings, the time series data are divided into fixed-sized segments, and each segment is seen as an exmple:
+
 *Multilayer Perceptron(MLP): predict the next elements based on the previous segment
 *1 D Convolutional Auto-encoder: reconstruct the given segment as input
 *Variational 1D Convolutional Auto-encoder: reconstruct the given segment as input
