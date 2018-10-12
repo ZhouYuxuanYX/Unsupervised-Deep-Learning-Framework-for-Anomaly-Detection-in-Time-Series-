@@ -42,13 +42,17 @@ def plot_prediction(train, val, predictions, training_mode):
             # plt.pause(0.001)
 
         else:
+            prediction_train = [0]
             plt.figure()
-            plt.plot([0].append(predictions[0][file]))
+            prediction_train.extend(list(predictions[0][file]))
+            plt.plot(prediction_train)
             plt.plot(train[file])
             plt.legend(["prediction on train set", "train data"])
 
             plt.figure()
-            plt.plot([0].append(predictions[1][file]))
+            prediction_val = [0]
+            prediction_val.extend(list(predictions[1][file]))
+            plt.plot(prediction_val)
             # every time, the validation file is the same
             plt.plot(val)
             plt.legend(["prediction on validation set", "validation data"])

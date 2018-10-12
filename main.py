@@ -2,7 +2,7 @@ from pathlib import Path
 from utils import *
 from Preprocesser import Preprocesser
 from visualize import plot_loss, plot_prediction
-from Model import Convolutioanl_autoencoder, Multilayer_Perceptron, Variational_Autoecnoder
+from Model import Convolutioanl_autoencoder, Multilayer_Perceptron, Variational_Autoecnoder, Wavenet
 import os
 import warnings
 from anomaly_detection import anomaly_detection
@@ -38,13 +38,13 @@ preprocesser.save(os.path.join(general_settings.processed_data_path, 'preprocess
 data_all_files = preprocesser.select_channel(channel_name)
 
 # even if read just one file, indexing like e.g. 3:4 should be used in order to keep the outer []
-train = data_all_files[0:5]
+train = data_all_files[5:8]
 
-# choose a verified file to be the validation set for all the model
-validation = None
-
+# choose a verified file for offline mode to be the validation set for all the model, must remove the outer dimension in order to
+# convert it to a np array correctly
+validation = data_all_files[0]
 # train and evaluate the model setting
-models, loss, predictions = Convolutioanl_autoencoder.train_and_predict(params_train, train, validation)
+models, loss, predictions = Wavenet.train_and_predict(params_train, train, validation)
 plot_loss(loss, params_train.training_mode)
 plot_prediction(train, validation, predictions, params_train.training_mode)
 anomaly_detection(train, predictions, params_train.training_mode, general_settings.detection_mode)

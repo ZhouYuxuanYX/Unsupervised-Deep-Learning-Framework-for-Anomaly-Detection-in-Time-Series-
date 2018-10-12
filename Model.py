@@ -1,8 +1,8 @@
-from tensorflow.keras.layers import Lambda, Input, Dense, Conv1D, MaxPooling1D, UpSampling1D, Flatten
-from tensorflow.keras.models import Model, Sequential
-from tensorflow.keras.losses import mse, binary_crossentropy
-from tensorflow.keras import backend as K
-from tensorflow.keras import optimizers
+from keras.layers import Lambda, Input, Dense, Conv1D, MaxPooling1D, UpSampling1D, Flatten, Dropout
+from keras.models import Model, Sequential
+from keras.losses import mse, binary_crossentropy
+from keras import backend as K
+from keras import optimizers
 import sys
 import types
 import pandas as pd
@@ -102,18 +102,22 @@ def create_callbacks(callbacks):
 
 # remark: don't need to split the data set inside the function, unless it would not be flexible enough, especially for the case where the data set for online and offline
 # mode are totally differently split
-def offline_mode(models, train_set, validation_set, batch_size, epochs, learning_rate, callbacks=None):
+def offline_mode(models, train_set, validation_set, num_epochs, learning_rate, callbacks=None):
     CallBacks = create_callbacks(callbacks)
     opt = optimizers.Adam(lr=learning_rate)
     models[0].compile(optimizer=opt, loss='MSE')
     # train the model on train_set, and cross validate on validation_set
-    history = models[0].fit(train_set[0], train_set[1], batch_size=batch_size, epochs=epochs, verbose=1,
-                        shuffle=False, validation_data=(validation_set[0], validation_set[1]), callbacks=CallBacks)
-    loss = [history.history['loss'], history.history['val_loss']]
-    predictions = [[], []]
-    predictions[0] = models[0].predict(train_set[0])
-    predictions[1] = models[0].predict(validation_set[0])
-    return models[0], loss, predictions
+    history = models[0].fit(train_set[:,:-1,:], train_set[:,1:,:],  validation_data=(validation_set[:,:-1,:],validation_set[:,1:,:]),
+                            epochs=num_epochs, verbose=1, shuffle=False, callbacks=CallBacks)
+    loss = [[],[]]
+    predictions = []
+    loss[0] = history.history['loss']
+    loss[1] = history.history["val_loss"]
+    predictions.append(models[0].predict(train_set[:,:-1,:]))
+    print(len(predictions[0]))
+    print(len(predictions))
+    predictions.append(models[0].predict(validation_set[:,:-1,:]))
+    return models, loss, predictions
 
 def online_mode(models, application_set, num_epochs, learning_rate, callbacks=None):
     CallBacks = create_callbacks(callbacks)
@@ -197,33 +201,23 @@ class neural_network_model(object):
                 losses[0].append(loss[0])
                 losses[1].append(loss[1])
 
+        # offline mode for wavenet
         if params.training_mode == 'offline':
-            validation_combined = create_lagged_df(validation_set, params.lags)
-
+            validation_set = cls._format_input(validation_set)
+        # it doesn't work, because every file length varies, can not be arranged as an array
             for file in range(len(train)):
                 print(file)
                 data = train[file]
-                data_combined = create_lagged_df(data, params.lags)
-                train_set = cls._format_input(data_combined)
-                validation_set = cls._format_input(validation_combined)
 
-                models, loss, predictions = offline_mode(models, train_set, validation_set, params.batch_size,
+                train_set = cls._format_input(data)
+
+                models, loss, predictions = offline_mode(models, train_set, validation_set,
                                                                 params.num_epochs, params.learning_rate, params.callbacks)
 
                 losses[0].append(loss[0])
                 losses[1].append(loss[1])
-                results[0].append(predictions[0][:, 0].squeeze())
-                results[1].append(predictions[1][:, 0].squeeze())
-        # if application_set != None:
-        #     for file in range(len(application_set)):
-        #         print(file)
-        #         data_unseen = application_set[file]
-        #         data_unseen_combined = create_lagged_df(data_unseen, params.lags)
-        #         application = cls._format_input(data_unseen_combined)
-        #         model = cls._build_model()
-        #
-        #         prediction = model.predict(application)
-        #         results[1].append(prediction[:, 0].squeeze())
+                results[0].append(predictions[0].squeeze())
+                results[1].append(predictions[1].squeeze())
 
         return models, losses, results
 
@@ -236,6 +230,59 @@ class neural_network_model(object):
     #         return self.classify_many([featureset])[0]
     #     else:
     #         raise NotImplementedError()
+
+class Wavenet(neural_network_model):
+
+    def __init__(self, model, losses, results):
+        self.model = model
+        self.losses = losses
+        self.results = results
+
+    @staticmethod
+    def _build_model(input_dim, filter_width):
+        """
+        return: Keras model instance
+        """
+        # convolutional layer oparameters
+        n_filters = 32
+        dilation_rates = [2 ** i for i in range(8)]
+
+        # define an input history series and pass it through a stack of dilated causal convolutions
+        history_seq = Input(shape=(None, 1))
+        x = history_seq
+
+        for dilation_rate in dilation_rates:
+            x = Conv1D(filters=n_filters,
+                       kernel_size=filter_width,
+                       padding='causal',
+                       dilation_rate=dilation_rate)(x)
+
+        x = Dense(128, activation='relu')(x)
+        x = Dropout(.2)(x)
+        x = Dense(1)(x)
+        model = Model(history_seq, x)
+
+        return [model]
+
+
+    @staticmethod
+    def _format_input(data):
+        """
+        the dimension should be formatted to (1, n, 1), where the second dimension are the number of points as features,
+        one file here would be only one example
+        """
+        print(data.shape)
+        if not isinstance(data,np.ndarray):
+                data = np.array(data)
+        print(data.shape)
+        data = np.reshape(data, (1, data.shape[0], 1))
+        return data
+
+    @classmethod
+    def train_and_predict(cls, params, train, validation_set, test_set=None, application_set=None):
+        models, losses, results = cls._train_and_predict(params, train, validation_set, test_set=None)
+        return models, losses, results
+
 
 class Convolutioanl_autoencoder(neural_network_model):
 
