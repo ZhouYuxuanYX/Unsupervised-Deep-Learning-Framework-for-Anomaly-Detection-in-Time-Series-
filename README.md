@@ -35,6 +35,6 @@ In the online settings, the time series data are divided into fixed-sized segmen
 * **Variational 1D Convolutional Auto-encoder**: reconstruct the given segment as input
 
 ## Models for offline settings
-In the offline settings, Wavenet and LSTM are employed to do the so-called in-sample prediction, that is to say, do prediction on the training data, in order to compare the difference, based on which anomaly scores could be calculated.
+In the offline settings, **Wavenet** and **LSTM** are employed to do the so-called in-sample prediction, that is to say, do prediction on the training data, in order to compare the difference, based on which anomaly scores could be calculated.
 
 
