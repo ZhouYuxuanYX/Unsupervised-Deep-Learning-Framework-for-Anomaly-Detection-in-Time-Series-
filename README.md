@@ -35,6 +35,16 @@ In the online settings, the time series data are divided into fixed-sized segmen
 * **Variational 1D Convolutional Auto-encoder**: reconstruct the given segment as input
 
 ## Models for offline settings
+
 In the offline settings, **Wavenet** and **LSTM** are employed to do the so-called in-sample prediction, that is to say, do prediction on the training data, in order to compare the difference, based on which anomaly scores could be calculated.
+
+## Search Hyperparameter
+
+The Hyperparameters are all saved in a json file, in order to configure and record the hyperparameter settings for one expreriment automatically and efficiently. In addition, a Parameter class is created, so that at each iteration of the grid search, the settings could be updated and saved into a related json file, under the test subdirectory. Take a look at **search_hyperparameters.py** for details.
+
+## Metrics Aggregation
+
+In order to have an overview of the experiments results with different hyperparameter settings, the variants of one hyperparamter are compared via one or more user-defined metrics. And **metrics_aggregation.py** helps to aggregate these results automatically during grid search, creating a table summerizing the metrics values.
+
 
 
