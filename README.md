@@ -30,13 +30,13 @@ reconstruct it again without losing the main information.
 
 **Model.py**
 
-In the online settings, the time series data are divided into fixed-sized segments, and each segment is seen as an exmple:
+In the **online** settings, the time series data are divided into fixed-sized segments, and each segment is seen as an exmple:
 
 * **Multilayer Perceptron(MLP)**: predict the next elements based on the previous segment
 * **1 D Convolutional Auto-encoder**: reconstruct the given segment as input
 * **Variational 1D Convolutional Auto-encoder**: reconstruct the given segment as input
 
-In the offline settings,  following models are employed to do the so-called in-sample prediction, that is to say, do prediction on the training data, in order to compare the difference, based on which anomaly scores could be calculated:
+In the **seq2seq** settings,  following models are employed to do the so-called in-sample prediction, that is to say, do prediction on the training data, in order to compare the difference, based on which anomaly scores could be calculated:
 * **Wavenet** 
 * **LSTM**
 
