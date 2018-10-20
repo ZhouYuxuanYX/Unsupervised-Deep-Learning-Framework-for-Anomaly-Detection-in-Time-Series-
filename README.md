@@ -36,7 +36,7 @@ In the **online** settings, the time series data are divided into fixed-sized se
 * **1 D Convolutional Auto-encoder**: reconstruct the given segment as input
 * **Variational 1D Convolutional Auto-encoder**: reconstruct the given segment as input
 
-In the **seq2seq** settings,  following models are employed to do the so-called in-sample prediction, that is to say, do prediction on the training data, in order to compare the difference, based on which anomaly scores could be calculated:
+In the **seq2seq** settings,  following sequence to sequence models are employed to do the so-called iterative inference, that is to say, predict only one step ahead in an iteration, and with the predicted point added to the input, move to the next iteration:
 * **Wavenet** 
 * **LSTM**
 
