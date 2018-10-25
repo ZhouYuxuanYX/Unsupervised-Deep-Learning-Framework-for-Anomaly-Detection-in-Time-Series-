@@ -6,7 +6,7 @@ import os
 
 from tabulate import tabulate
 
-def aggregate_metrics(parent_dir, metrics):
+def aggregate_metrics(parent_dir, metrics, channel_name):
     """Aggregate the metrics of all experiments in folder `parent_dir`.
     Assumes that `parent_dir` contains multiple experiments, with their results stored in
     `parent_dir/subdir/metrics_dev.json`
@@ -15,7 +15,7 @@ def aggregate_metrics(parent_dir, metrics):
         metrics: (dict) subdir -> {'accuracy': ..., ...}
     """
     # Get the metrics for the folder if it has results from an experiment
-    metrics_file = os.path.join(parent_dir, 'metric.json')
+    metrics_file = os.path.join(parent_dir, channel_name+'_metric.json')
     if os.path.isfile(metrics_file):
         with open(metrics_file, 'r') as f:
             metrics[parent_dir] = json.load(f)
@@ -25,7 +25,7 @@ def aggregate_metrics(parent_dir, metrics):
         if not os.path.isdir(os.path.join(parent_dir, subdir)):
             continue
         else:
-            aggregate_metrics(os.path.join(parent_dir, subdir), metrics)
+            aggregate_metrics(os.path.join(parent_dir, subdir), metrics, channel_name)
 
 
 def metrics_to_table(metrics):

@@ -11,7 +11,7 @@ def launch_training_job(model_dir, parameter_name, parameter_value, params, gene
         params: (dict) containing basic setting of hyperparameters
        """
     # Create a new folder in parent_dir with unique_name "job_name"
-    parameter_dir = os.path.join(model_dir, parameter_name)
+    parameter_dir = os.path.join(model_dir, parameter_name+"_pred_step_"+str(general_settings.prediction_steps))
     if not os.path.exists(parameter_dir):
         os.makedirs(parameter_dir)
     job_dir = os.path.join(parameter_dir, parameter_name+"_"+str(parameter_value))
@@ -23,12 +23,10 @@ def launch_training_job(model_dir, parameter_name, parameter_value, params, gene
     params.save(json_path)
 
     # Launch training with this config
-    train_and_evaluate(params, channel_name, general_settings, job_dir)
+    train_and_evaluate(params, general_settings, job_dir)
 
 if __name__ == "__main__":
     ##### Initializing #####
-    # choose the channel for training
-    channel_name = 'p_0'
 
     # define paths
     # use the Python3 Pathlib modul to create platform independent path
@@ -57,15 +55,17 @@ if __name__ == "__main__":
 
 
     # Aggregate metrics from args.parent_dir directory
-    parent_dir = os.path.join(model_dir, "num_epochs")
-    metrics = dict()
-    aggregate_metrics(parent_dir, metrics)
-    table = metrics_to_table(metrics)
+    # parent_dir = os.path.join(model_dir, "num_epochs_pred_step_1")
+    parent_dir = model_dir
+    for channel_name in general_settings.channels:
+        metrics = dict()
+        aggregate_metrics(parent_dir, metrics, channel_name)
+        table = metrics_to_table(metrics)
 
-    # Display the table to terminal
-    print(table)
+        # Display the table to terminal
+        print(table)
 
-    # Save results in parent_dir/results.md
-    save_file = os.path.join(parent_dir, "results.md")
-    with open(save_file, 'w') as f:
-        f.write(table)
+        # Save results in parent_dir/results.md
+        save_file = os.path.join(parent_dir, channel_name+"_results.md")
+        with open(save_file, 'w') as f:
+            f.write(table)

@@ -38,13 +38,10 @@ preprocesser.save(os.path.join(general_settings.processed_data_path, 'preprocess
 data_all_files = preprocesser.select_channel(channel_name)
 
 # even if read just one file, indexing like e.g. 3:4 should be used in order to keep the outer []
-train = data_all_files[5:8]
+train = data_all_files[4:8]
 
-# choose a verified file for offline mode to be the validation set for all the model, must remove the outer dimension in order to
-# convert it to a np array correctly
-validation = data_all_files[0]
 # train and evaluate the model setting
-models, loss, predictions = Wavenet.train_and_predict(params_train, train, validation)
-plot_loss(loss, params_train.training_mode)
-plot_prediction(train, validation, predictions, params_train.training_mode)
-anomaly_detection(train, predictions, params_train.training_mode, general_settings.detection_mode)
+models, loss, predictions = Wavenet.train_and_predict(params_train, train, general_settings)
+plot_loss(loss)
+plot_prediction(train, predictions,general_settings.prediction_steps)
+anomaly_detection(train, predictions, general_settings.detection_mode)

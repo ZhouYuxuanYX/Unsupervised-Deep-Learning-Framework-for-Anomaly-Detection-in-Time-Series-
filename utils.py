@@ -39,7 +39,7 @@ class Params():
         return self.__dict__
 
 def split_data_set(data_all_files, proportion_train, proportion_validation):
-    """only for offline mode, and only the verified normal data set are given"""
+    """only for seq2seq mode, and only the verified normal data set are given"""
     split_train = int(len(data_all_files)*proportion_train)
     split_validation = int(len(data_all_files)*proportion_validation)
 

@@ -1,6 +1,7 @@
 from keras.layers import Lambda, Input, Dense, Conv1D, MaxPooling1D, UpSampling1D, Flatten, Dropout
 from keras.models import Model, Sequential
 from keras.losses import mse, binary_crossentropy
+from keras.optimizers import Adam, sgd
 from keras import backend as K
 from keras import optimizers
 import sys
@@ -79,6 +80,7 @@ def create_lagged_df(data, lags):
     df = pd.concat([data.shift(lag) for lag in range(-lags,0)], axis=1)
     df.columns = ['lag {}'.format(-lag) for lag in range(-lags,0)]
     data_combined = data.join(df)
+    # Padded in the left, in order to synchronize with the original data
     data_combined = data_combined.fillna(0).values
     return data_combined
 
@@ -102,24 +104,28 @@ def create_callbacks(callbacks):
 
 # remark: don't need to split the data set inside the function, unless it would not be flexible enough, especially for the case where the data set for online and offline
 # mode are totally differently split
-def offline_mode(models, train_set, validation_set, num_epochs, learning_rate, callbacks=None):
-    CallBacks = create_callbacks(callbacks)
-    opt = optimizers.Adam(lr=learning_rate)
-    models[0].compile(optimizer=opt, loss='MSE')
-    # train the model on train_set, and cross validate on validation_set
-    history = models[0].fit(train_set[:,:-1,:], train_set[:,1:,:],  validation_data=(validation_set[:,:-1,:],validation_set[:,1:,:]),
-                            epochs=num_epochs, verbose=1, shuffle=False, callbacks=CallBacks)
-    loss = [[],[]]
-    predictions = []
-    loss[0] = history.history['loss']
-    loss[1] = history.history["val_loss"]
-    predictions.append(models[0].predict(train_set[:,:-1,:]))
-    print(len(predictions[0]))
-    print(len(predictions))
-    predictions.append(models[0].predict(validation_set[:,:-1,:]))
-    return models, loss, predictions
+def seq2seq_mode(models, application_set, num_epochs, learning_rate, sliding_step, callbacks=None):
 
-def online_mode(models, application_set, num_epochs, learning_rate, callbacks=None):
+    # define inference step
+    def predict_sequence(input_sequence):
+        history_sequence = input_sequence.copy()
+        print("history sequence shape: ", history_sequence.shape)
+        pred_sequence = np.zeros((sliding_step, 1))  # initialize output (pred_steps time steps)
+        print(pred_sequence.shape)
+        for i in range(sliding_step):
+            # record next time step prediction (last time step of model output)
+            # remark, if direkt indexing one dimension with integer, then this dimension will be reduced
+            last_step_pred = models[0].predict(history_sequence)[:,-1:, :]
+            print("last step prediction first 10 channels")
+            print(last_step_pred.shape)
+            pred_sequence[i, 0] = last_step_pred
+
+            # add the next time step prediction to the history sequence
+            history_sequence = np.concatenate([history_sequence,
+                                                last_step_pred.reshape(1, 1,1)], axis=1)
+
+        return pred_sequence
+
     CallBacks = create_callbacks(callbacks)
     # opt = optimizers.Adam(lr=learning_rate)
     models[0].compile(optimizer="Adam", loss='MSE')
@@ -129,28 +135,86 @@ def online_mode(models, application_set, num_epochs, learning_rate, callbacks=No
     predictions = [[], []] # the first element is prediction on training data, the second on unseen data
     # remark, if we really want to avoid overlapping, we can choose to loop with a step size equal to window size, but achtually we
     # don't need to bother, just choose the original time column, then it's fine
-    for i in range(len(application_set[0]) - 1):
+    for i in range(int(len(application_set) / sliding_step) - 1):
         # each data set contains pairs of features and labels in 0 and 1 position
-        x = application_set[0][i]  # Dimension from outer to inner
-        x = np.expand_dims(x, 0)  # restore the dimension after slicing
-        y = application_set[1][i]
-        y = np.expand_dims(y, 0)
-        # extract next row of the lagged matrix, which is one step further than x at every column position
-        x_next = application_set[0][i + 1]
+        x = application_set[i]  # Dimension from outer to inner
+        x = np.expand_dims(x, 0) # restore the dimension after slicing
+        # extract next row of the lagged matrix, which is #stride step further than x at every column position
+        x_next = application_set[i + sliding_step]
         x_next = np.expand_dims(x_next, 0)
-        history = models[0].fit(x, y, epochs=num_epochs, verbose=1, shuffle=False,callbacks=CallBacks)
+        # Using teacher forcing during training, which means during inference every previous ground truth is fed to the network
+        history = models[0].fit(x[:,:-1,:], x[:,-16:,:], epochs=num_epochs, verbose=1, shuffle=False,callbacks=CallBacks)
         train_losses.append(history.history['loss'])
-        predictions[1].extend(models[0].predict(x_next))
-        predictions[0].extend(models[0].predict(x))
+        # Special case(one step ahead prediction): for MLP, each prediction itself is a (1,) array, after squeeze then can not be converted to list
+        if sliding_step > 1:
+            pred = predict_sequence(x_next[:,:-sliding_step, :])
+            predict = list(pred.squeeze())
+            predictions[1].extend(predict)
+            predict = list(predict_sequence(x[:,:-sliding_step, :]).squeeze())
+            predictions[0].extend(predict)
+        else:
+            predictions[1].extend(predict_sequence(x_next[:,:-sliding_step, :]))
+            predictions[0].extend(predict_sequence(x[:,:-sliding_step, :]))
+    # convert the list of n (1,) arrays to a (n,1) array
+    if sliding_step > 1:
+        predictions[0] = np.expand_dims(np.array(predictions[0]), 1)
+        predictions[1] = np.expand_dims(np.array(predictions[1]), 1)
+    else:
+        predictions[0] = np.array(predictions[0])
+        predictions[1] = np.array(predictions[1])
     # rolling loss takes the training loss of last epoch for each example
     rolling_loss = np.array(train_losses)[:, (num_epochs-1)]
     loss[0] = rolling_loss
     # train loss take the average value of the losses over the whole data set for each epoch
     train_loss = np.average(train_losses, axis=0).flatten()
     loss[1] = train_loss
-    predictions[0] = np.array(predictions[0])
-    predictions[1] = np.array(predictions[1])
+    return models, loss, predictions
 
+
+def online_mode(models, application_set, num_epochs, learning_rate, sliding_step, callbacks=None):
+    CallBacks = create_callbacks(callbacks)
+    # opt = optimizers.Adam(lr=learning_rate)
+    models[0].compile(optimizer="Adam", loss='MSE')
+    # train and predict alternatively on the application set, using a universal validation set for all the updating steps
+    loss = [[], []]
+    train_losses = []
+    predictions = [[], []] # the first element is prediction on training data, the second on unseen data
+    # remark, if we really want to avoid overlapping, we can choose to loop with a step size equal to window size, but achtually we
+    # don't need to bother, just choose the original time column, then it's fine
+    for i in range(int(len(application_set[0]) / sliding_step) - 1):
+        # each data set contains pairs of features and labels in 0 and 1 position
+        x = application_set[0][i]  # Dimension from outer to inner
+        x = np.expand_dims(x, 0)  # restore the dimension after slicing
+        y = application_set[1][i]
+        y = np.expand_dims(y, 0)
+        # extract next row of the lagged matrix, which is one step further than x at every column position
+        x_next = application_set[0][i + sliding_step]
+        x_next = np.expand_dims(x_next, 0)
+        history = models[0].fit(x, y, epochs=num_epochs, verbose=1, shuffle=False,callbacks=CallBacks)
+        train_losses.append(history.history['loss'])
+        # Special case(one step ahead prediction): for MLP, each prediction itself is a (1,) array, after squeeze then can not be converted to list
+        if sliding_step > 1:
+            pred = models[0].predict(x_next)
+            predict = list(models[0].predict(x_next).squeeze())[:sliding_step]
+            predictions[1].extend(predict)
+            predict = list(models[0].predict(x).squeeze())[:sliding_step]
+            predictions[0].extend(predict)
+        else:
+            predictions[1].extend(models[0].predict(x_next))
+            predictions[0].extend(models[0].predict(x))
+    # convert the list of n (1,) arrays to a (n,1) array
+    if sliding_step > 1:
+        predictions[0] = np.expand_dims(np.array(predictions[0]), 1)
+        predictions[1] = np.expand_dims(np.array(predictions[1]), 1)
+    else:
+        predictions[0] = np.array(predictions[0])
+        predictions[1] = np.array(predictions[1])
+    # rolling loss takes the training loss of last epoch for each example
+    rolling_loss = np.array(train_losses)[:, (num_epochs-1)]
+    loss[0] = rolling_loss
+    # train loss take the average value of the losses over the whole data set for each epoch
+    train_loss = np.average(train_losses, axis=0).flatten()
+    loss[1] = train_loss
     return models, loss, predictions
 
 # in python2 this will create a new style class object, but in python3 there's no need to do it
@@ -166,34 +230,35 @@ class neural_network_model(object):
       - either ``prob_classify()`` or ``prob_classify_many()`` (or both)
     """
     @staticmethod
-    def _build_model(lags, filter_size):
+    def _build_model(lags, filter_size, prediction_steps=None):
         """
         return: Keras model instance
         """
         raise NotImplementedError()
 
     @staticmethod
-    def _format_input(data):
+    def _format_input(data, prediction_steps=None):
         """
         return: formatted input suitable for specific network
         """
         raise NotImplementedError()
 
     @classmethod
-    def _train_and_predict(cls, params, train, validation_set, test_set=None, application_set=None):
+    def _train_and_predict(cls, params, train, general_settings, test_set=None, application_set=None):
         # submodels are e.g. encoder and decoder part of an autoencoder model, use * to recieve potentially multiple outputs
-        models = cls._build_model(params.lags, params.filter_size)
+        models = cls._build_model(params.lags, params.filter_size, general_settings.prediction_steps)
         results = [[],[]]
         # the first element is rolling loss, the second training loss
         losses =[[],[]]
-        if params.training_mode == "online":
+        if general_settings.model_type != "wavenet":
             for file in range(len(train)):
                 print(file)
                 data = train[file]
                 data_combined = create_lagged_df(data, params.lags)
-                train_set = cls._format_input(data_combined)
+                print("data input shape: ", data_combined.shape)
+                train_set = cls._format_input(data_combined, general_settings.prediction_steps)
 
-                model, loss, predictions = online_mode(models, train_set, params.num_epochs, params.learning_rate, params.callbacks)
+                models, loss, predictions = online_mode(models, train_set, params.num_epochs, params.learning_rate, general_settings.prediction_steps, params.callbacks)
                 # take the first column out, or averaging over the window is also ok, because of the overlapping
                 # numpy.squeeze() guarantees the dimension suitable for plot functions
                 results[0].append(predictions[0][:, 0].squeeze())
@@ -201,24 +266,22 @@ class neural_network_model(object):
                 losses[0].append(loss[0])
                 losses[1].append(loss[1])
 
-        # offline mode for wavenet
-        if params.training_mode == 'offline':
-            validation_set = cls._format_input(validation_set)
-        # it doesn't work, because every file length varies, can not be arranged as an array
+        # seq2seq mode for wavenet
+        else:
             for file in range(len(train)):
                 print(file)
                 data = train[file]
+                data_combined = create_lagged_df(data, params.lags)
+                print("data input shape: ", data_combined.shape)
+                train_set = cls._format_input(data_combined, general_settings.prediction_steps)
 
-                train_set = cls._format_input(data)
-
-                models, loss, predictions = offline_mode(models, train_set, validation_set,
-                                                                params.num_epochs, params.learning_rate, params.callbacks)
-
+                models, loss, predictions = seq2seq_mode(models, train_set, params.num_epochs, params.learning_rate, general_settings.prediction_steps, params.callbacks)
+                # take the first column out, or averaging over the window is also ok, because of the overlapping
+                # numpy.squeeze() guarantees the dimension suitable for plot functions
+                results[0].append(predictions[0][:, 0].squeeze())
+                results[1].append(predictions[1][:, 0].squeeze())
                 losses[0].append(loss[0])
                 losses[1].append(loss[1])
-                results[0].append(predictions[0].squeeze())
-                results[1].append(predictions[1].squeeze())
-
         return models, losses, results
 
     # def classify(self, featureset):
@@ -239,12 +302,12 @@ class Wavenet(neural_network_model):
         self.results = results
 
     @staticmethod
-    def _build_model(input_dim, filter_width):
+    def _build_model(input_dim, filter_width, prediction_steps=None):
         """
         return: Keras model instance
         """
         # convolutional layer oparameters
-        n_filters = 32
+        n_filters = 128
         dilation_rates = [2 ** i for i in range(8)]
 
         # define an input history series and pass it through a stack of dilated causal convolutions
@@ -258,24 +321,25 @@ class Wavenet(neural_network_model):
                        dilation_rate=dilation_rate)(x)
 
         x = Dense(128, activation='relu')(x)
-        x = Dropout(.2)(x)
+        x = Dropout(.8)(x)
+        x = Dense(64)(x)
         x = Dense(1)(x)
-        model = Model(history_seq, x)
+
+        # extract the last 16 time steps as the training target
+        def slice(x, seq_length):
+            return x[:, -seq_length:, :]
+
+        pred_seq_train = Lambda(slice, arguments={'seq_length': 16})(x)
+
+        model = Model(history_seq, pred_seq_train)
 
         return [model]
 
 
     @staticmethod
-    def _format_input(data):
-        """
-        the dimension should be formatted to (1, n, 1), where the second dimension are the number of points as features,
-        one file here would be only one example
-        """
-        print(data.shape)
-        if not isinstance(data,np.ndarray):
-                data = np.array(data)
-        print(data.shape)
-        data = np.reshape(data, (1, data.shape[0], 1))
+    def _format_input(data, prediction_steps=None):
+        # flip the array, in order to get time step from past to current
+        data = np.flip(to_three_d_array(data),1)
         return data
 
     @classmethod
@@ -292,7 +356,7 @@ class Convolutioanl_autoencoder(neural_network_model):
         self.results = results
 
     @staticmethod
-    def _build_model(lags, filter_size):
+    def _build_model(lags, filter_size, prediction_steps=None):
         """
         return: Keras model instance
         """
@@ -324,7 +388,7 @@ class Convolutioanl_autoencoder(neural_network_model):
         return (autoencoder, encoder)
 
     @staticmethod
-    def _format_input(data):
+    def _format_input(data, prediction_steps=None):
         """
         return: formatted input suitable for specific network
         """
@@ -348,23 +412,24 @@ class Multilayer_Perceptron(neural_network_model):
         self.results = results
 
     @staticmethod
-    def _build_model(input_dim, filter_size):
+    def _build_model(lags, filter_size, prediction_steps=1):
         """
         return: Keras model instance
         """
+        input_dim = lags - prediction_steps + 1
         mdl = Sequential()
         # remark: input_shape: tuple, but input_dim: integer(especially for 1 D layer)
-        mdl.add(Dense(12, input_dim=input_dim, activation='relu'))
-        mdl.add(Dense(6, activation='relu'))
-        mdl.add(Dense(1))
+        mdl.add(Dense(128, input_dim=input_dim, activation='relu'))
+        mdl.add(Dense(64, activation='relu'))
+        mdl.add(Dense(prediction_steps))
         return [mdl]
 
     @staticmethod
-    def _format_input(data):
+    def _format_input(data, prediction_steps=1):
         """
         return: formatted input suitable for specific network
         """
-        data_set = [data[:, 1:], data[:, 0]]
+        data_set = [data[:, prediction_steps:], data[:, 0:prediction_steps]]
 
         return data_set
 
@@ -381,7 +446,7 @@ class Variational_Autoecnoder(neural_network_model):
         self.results = results
 
     @staticmethod
-    def _build_model(lags, filter_size):
+    def _build_model(lags, filter_size, prediction_steps=None):
         """
         return: Keras model instance
         """
@@ -434,7 +499,7 @@ class Variational_Autoecnoder(neural_network_model):
         return  (autoencoder, encoder)
 
     @staticmethod
-    def _format_input(data):
+    def _format_input(data, prediction_steps=None):
         """
         return: formatted input suitable for specific network
         """
