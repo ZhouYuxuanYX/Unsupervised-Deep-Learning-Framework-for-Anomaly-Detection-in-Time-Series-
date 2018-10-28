@@ -54,8 +54,9 @@ def arima(error_data, data, prediction):
         ax.annotate(pdq[i], xy=(i, AICs[i]))
 
     pred = best_res.get_prediction(start=0 , end=len(error_data)-1)
+    # maybe we could adjust the confidence interval dynamically, according to the mse niveau of each file
     # 0.02 means 98% confidence interval
-    pred_ci = pred.conf_int(0.02)
+    pred_ci = pred.conf_int(0.01)
     pred_ci.iloc[0] = [0,0]
 
     # must reverse the error back to original data
@@ -78,6 +79,7 @@ def arima(error_data, data, prediction):
     UCL.columns = [0]
     # create a mask array for anomaly points
     mask_anomaly = (LCL>data).astype(int)+(UCL<data).astype(int)
+    # Dataframe[i] takes the ith column out as pd.Series
     anomaly = mask_anomaly.loc[mask_anomaly[0]==1]*data
     plt.plot(anomaly,'r*')
     # plt.fill_between(pd.DataFrame(prediction)[mask_anomaly].index, ax.get_ylim(), alpha = 0.9, color='r')

@@ -1,7 +1,49 @@
-from preprocessing import *
 import numpy as np
 from import_data import open_data
+from sklearn.preprocessing import RobustScaler
 
+rs = RobustScaler()
+
+def cut_head_tail(data, cut_num=50):
+    """remove first/last few points
+
+    Args:
+        data: List with each channel as sublist. Each channel itself contains the signal in one file as 1D array
+
+    Returns:
+        data_cut: Same format as data, with head and tailed cut out
+    """
+    if cut_num == 0:
+        data_cut = data
+    else:
+        data_cut = data[cut_num:-cut_num]
+    return data_cut
+
+def rob_scal(data):
+    """Apply the RobustScaler to depress the effect of outliers
+
+    Args:
+        data: 2D array [examples, features],
+        becasue it's raw data, so it should be seen as n examples with only one feature(each point
+
+    Returns:
+        signal_scaled: List
+    """
+    signal = data.reshape(-1,1) # It returns the reshaped array but doesn't change the original one
+    signal_scaled = rs.fit_transform(signal)
+    signal_scaled = signal_scaled.reshape(1, -1).squeeze()
+    return signal_scaled
+
+def to_three_d_array(lists):
+    """Expand a list to 3D array
+
+    Args: List [Example1, Example2......](outer [] as first dimensions when transformed to array
+
+    Returs: 3D array [examples, features, channels]
+    """
+    arrays = np.array(lists)
+    arrays = np.reshape(arrays,(arrays.shape[0],-1,1))
+    return arrays
 
 class Preprocesser():
     # define the parameters as class attributes for preprocessing, which are not quite often changed

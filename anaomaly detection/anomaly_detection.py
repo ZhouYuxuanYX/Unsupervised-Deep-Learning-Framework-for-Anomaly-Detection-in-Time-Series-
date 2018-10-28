@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats import norm
 import matplotlib.pyplot as plt
 from detection_modes import arima
 from time_series_analysis import ts_analysis
@@ -37,19 +38,38 @@ def control_limits(variance_estimation, test_predicted):
     # plt.legend(["prediction on validation set", "validation data"])
 
 
-def anomaly_detection(train, val, predictions, training_mode, detection_mode):
+def anomaly_detection(train, predictions, detection_mode):
     for file in range(len(predictions[0])):
-        if training_mode == "online" and detection_mode == "ARIMA":
+        if detection_mode == "ARIMA":
             data = train[file][1:]
             prediction = predictions[1][file]
             error_data = reconstruction_error(data, prediction)
             arima(error_data, data, prediction)
 
-        if training_mode == "online" and detection_mode == "MSE":
-            data = train[file][1:]
-            prediction = predictions[1][file]
-            error_data = reconstruction_error(data, prediction)
-            mse = error_data**2
-            plt.figure()
-            plt.plot(mse)
+        # if detection_mode == "Gaussian":
+        #     data = train[file][1:]
+        #     prediction = predictions[1][file]
+        #     error_data = reconstruction_error(data, prediction)
+        #     mse = error_data**2
+        #     # calculate the threshold by fitting a gaussian model
+        #     # fit a normal distribution
+        #     mu, std = norm.fit(mse)
+        #     # plot the histogram
+        #     plt.hist(mse, bins = 25, density=True, alpha=0.6, color='g')
+        #     # plot the pdf
+        #     # Plot the PDF.
+        #     xmin, xmax = plt.xlim()
+        #     x = np.linspace(xmin, xmax, 100)
+        #     p = norm.pdf(x, mu, std)
+        #     plt.plot(x, p, 'k', linewidth=2)
+        #     title = "Fit results: mu = %.2f,  std = %.2f" % (mu, std)
+        #     plt.title(title)
+        #     # draw confidence bound(gray)
+        #     LCL = prediction - np.sqrt(mu+2*std)
+        #     UCL = prediction + np.sqrt(mu+2*std)
+        #     plt.figure()
+        #     plt.fill_between(prediction, LCL, UCL, color='g')
+        #     # create a mask array for anomaly points
+        #     mask_anomaly = (LCL>data).astype(int)+(UCL<data).astype(int)
+        #     # anomaly =
 

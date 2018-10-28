@@ -1,0 +1,9 @@
+{
+  "num_epochs": 10,
+  "batch_size": 128,
+  "save_summary_steps": 100,
+  "callbacks": "None",
+  "lags": 63,
+  "filter_size": 5,
+  "learning_rate": 0.01
+}
