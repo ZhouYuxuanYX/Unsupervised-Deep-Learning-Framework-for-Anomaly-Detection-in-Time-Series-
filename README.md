@@ -50,8 +50,10 @@ In order to have an overview of the experiments results with different hyperpara
 
 ## Test on NAB dataset
 See details about Numenta-Anomaly-Benchmark [NAB dataset](https://numenta.com/machine-intelligence-technology/numenta-anomaly-benchmark/)
-![Hyperparameters, can be further optimized](hyperparameters.png)
+![Hyperparameters, can be further optimized](Hyperparameters.png)
 
 ![Test Reults in comparison to Entries to the 2016 NAB competition](results.png)
+
+![Result analysis](Analysis.png)
 
 
