@@ -50,7 +50,9 @@ In order to have an overview of the experiments results with different hyperpara
 
 ## Test on NAB dataset
 More details about Numenta-Anomaly-Benchmark see [NAB dataset](https://numenta.com/machine-intelligence-technology/numenta-anomaly-benchmark/)
+
 Hyperparameter settings(can be further optimized):
+
 * Prediction step: 10
 * Window size: 128
 * Detection method: Gaussian
