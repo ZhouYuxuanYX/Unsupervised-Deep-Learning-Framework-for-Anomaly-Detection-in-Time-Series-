@@ -49,9 +49,13 @@ The Hyperparameters are all saved in a json file, in order to configure and reco
 In order to have an overview of the experiments results with different hyperparameter settings, the variants of one hyperparamter are compared via one or more user-defined metrics. And this file helps to aggregate these results automatically during grid search, creating a table summerizing the metrics values.
 
 ## Test on NAB dataset
-See details about Numenta-Anomaly-Benchmark [NAB dataset](https://numenta.com/machine-intelligence-technology/numenta-anomaly-benchmark/)
-
-![Hyperparameters, can be further optimized](Hyperparameters.png)
+More details about Numenta-Anomaly-Benchmark see [NAB dataset](https://numenta.com/machine-intelligence-technology/numenta-anomaly-benchmark/)
+Hyperparameter settings(can be further optimized):
+* Prediction step: 10
+* Window size: 128
+* Detection method: Gaussian
+* Threshold: 6 sigma
+* Epochs: 10
 
 ![Test Reults in comparison to Entries to the 2016 NAB competition](results.png)
 
