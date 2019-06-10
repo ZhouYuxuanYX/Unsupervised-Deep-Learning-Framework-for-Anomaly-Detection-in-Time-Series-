@@ -49,7 +49,7 @@ The Hyperparameters are all saved in a json file, in order to configure and reco
 In order to have an overview of the experiments results with different hyperparameter settings, the variants of one hyperparamter are compared via one or more user-defined metrics. And this file helps to aggregate these results automatically during grid search, creating a table summerizing the metrics values.
 
 ## Test on NAB dataset
-
-![Test Reults in comparison to Entries to the 2016 NAB competition](3DTest.png)
+See details about Numenta-Anomaly-Benchmark [NAB dataset](https://numenta.com/machine-intelligence-technology/numenta-anomaly-benchmark/)
+![Test Reults in comparison to Entries to the 2016 NAB competition](results.png)
 
 
