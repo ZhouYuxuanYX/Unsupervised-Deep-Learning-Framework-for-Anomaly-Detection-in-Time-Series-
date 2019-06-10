@@ -4,6 +4,6 @@
   "save_summary_steps": 100,
   "callbacks": "None",
   "lags": 63,
-  "filter_size": 5,
+  "filter_size": 1,
   "learning_rate": 0.01
 }

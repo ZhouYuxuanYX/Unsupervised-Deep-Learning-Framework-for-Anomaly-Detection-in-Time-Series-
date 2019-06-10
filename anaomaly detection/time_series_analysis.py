@@ -7,11 +7,12 @@ def adf_test(data):
     Perform Augumented Dickey Fuller test(unit root test):
     test null-hypothesis for 'non-stationary random walk process'
     """
-    dftest = adfuller(data, regression='ctt',autolag='AIC')
+    dftest = adfuller(data, regression='c',autolag='AIC')
     dfoutput = pd.Series(dftest[0:4], index=['test statistic', 'p-value', '# of lags', '# of observations'])
     for key, value in dftest[4].items():
         dfoutput['Critical Value ({})'.format(key)] = value
     print(dfoutput)
+    return dftest[1]>=dftest[4]["1%"]
 
 def ts_analysis(data):
     # if time series is not a Series object, convert it to

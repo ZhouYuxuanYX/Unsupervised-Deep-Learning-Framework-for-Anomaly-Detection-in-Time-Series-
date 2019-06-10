@@ -1,15 +1,26 @@
 from pathlib import Path
 from model.Param import *
-from Preprocesser import Preprocesser
+from Preprocess.Preprocesser import Preprocesser
 from model.visualizing import plot_loss, plot_prediction
-from model.Model import Wavenet
+from model.Model import *
 import os
 import warnings
 from anomaly_detection import anomaly_detection
+from time_series_analysis import *
 warnings.filterwarnings("ignore")
 
-##### Initializing #####
+# Here the prediction[1] is to be used, cause it's real prediction
+def mse_metric(train, predictions, prediction_steps):
+    MSE = []
+    for file in range(len(predictions[1])):
+        # if the sliding_step is large, maybe the last few points on the end could not be covered(less than the sliding_step)
+        error = train[file][:len(predictions[1][file])]-predictions[1][file]
+        # Median value is more stable than mean
+        mse = np.median((error)**2)
+        MSE.append(mse)
+    return MSE
 
+##### Initializing #####
 # define paths
 # use the Python3 Pathlib modul to create platform independent path
 general_settings = Params.update(
@@ -26,22 +37,27 @@ channel_name = 'p_0'
 model_dir = os.path.join(general_settings.experiments_path, general_settings.model_type)
 json_path = Path(model_dir) / 'params.json'
 params_train = Params.update(json_path)
+
 ##### handle the data #####
 # preprocess the data
 preprocesser = Preprocesser.from_tdm(general_settings.data_path, general_settings.channels, general_settings.time_index)
 data_preprocessed_labeled = preprocesser.data
 
-# save the preprocessed data in a numpy array
-preprocesser.save(os.path.join(general_settings.processed_data_path, 'preprocessed data array'))
-
 # select the channel out of the whole array
 data_all_files = preprocesser.select_channel(channel_name)
 
 # even if read just one file, indexing like e.g. 3:4 should be used in order to keep the outer []
-train = data_all_files[4:8]
+train = data_all_files[:2]
 
 # train and evaluate the model setting
-models, loss, predictions = Wavenet.train_and_predict(params_train, train, general_settings)
-plot_loss(loss)
-plot_prediction(train, predictions,general_settings.prediction_steps)
+if general_settings.model_type == "1d conv":
+    models, loss, predictions = Convolutioanl_autoencoder.train_and_predict(params_train, train, general_settings)
+elif general_settings.model_type == "MLP":
+    models, loss, predictions = Multilayer_Perceptron.train_and_predict(params_train, train, general_settings)
+elif general_settings.model_type == "wavenet":
+    models, loss, predictions = Wavenet.train_and_predict(params_train, train, general_settings)
+else:
+    models, loss, predictions = Variational_Autoecnoder.train_and_predict(params_train, train, general_settings)
+
+MSE = mse_metric(train, predictions, general_settings.prediction_steps)
 anomaly_detection(train, predictions, general_settings.detection_mode)

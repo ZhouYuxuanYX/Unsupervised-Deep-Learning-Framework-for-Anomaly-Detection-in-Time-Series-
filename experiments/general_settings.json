@@ -2,9 +2,9 @@
   "experiments_path": "C:/Users/zhouyuxuan/PycharmProjects/Masterarbeit/experiments",
   "processed_data_path": "C:/Users/zhouyuxuan/PycharmProjects/Masterarbeit/Processed Data",
   "data_path": "C:/Users/zhouyuxuan/PycharmProjects/Masterarbeit/data",
-  "channels": ["p_0", "T_0"],
+  "channels": ["p_0", "p_1"],
   "model_type": "wavenet",
-  "detection_mode": "ARIMA",
+  "detection_mode": "Gaussian",
   "time_index": 0,
   "prediction_steps": 5
 }

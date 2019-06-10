@@ -4,13 +4,19 @@ import matplotlib.pyplot as plt
 import itertools
 import statsmodels.api as sm
 import sys
+from time_series_analysis import adf_test
 
 def arima(error_data, data, prediction):
     data = pd.DataFrame(data)
-    error_data = pd.DataFrame(error_data)
+    error = pd.DataFrame(error_data)
     # define the p, d and q parameters to take any value between 0 and 2
-    p = d  = q = range(3)
-
+    p = q = range(3)
+    if adf_test(error_data):
+        d = range(3)
+    elif adf_test(error_data):
+        d = range(1,3)
+    else:
+        d = range(2,3)
     # generate all different combinations of p, d and q triples
     # itertools.product works as a nested for loop
     pdq = list(itertools.product(p, d, q))
@@ -28,8 +34,8 @@ def arima(error_data, data, prediction):
     AICs = []
     for param in pdq:
             try:
-                tmp_mdl = sm.tsa.SARIMAX(error_data, order = param, enforce_stationary=True,
-                                  enforce_invetibility=True)
+                tmp_mdl = sm.tsa.SARIMAX(error, order = param, enforce_stationary=True,
+                                         enforce_invetibility=True)
                 res = tmp_mdl.fit()
                 AICs.append((res.aic))
                 if res.aic <= best_aic:
@@ -53,7 +59,7 @@ def arima(error_data, data, prediction):
     for i in range(len(pdq)):
         ax.annotate(pdq[i], xy=(i, AICs[i]))
 
-    pred = best_res.get_prediction(start=0 , end=len(error_data)-1)
+    pred = best_res.get_prediction(start=0, end=len(error) - 1)
     # maybe we could adjust the confidence interval dynamically, according to the mse niveau of each file
     # 0.02 means 98% confidence interval
     pred_ci = pred.conf_int(0.01)

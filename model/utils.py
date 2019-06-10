@@ -14,9 +14,11 @@ def to_three_d_array(lists):
 
 def create_lagged_df(data, lags):
     data = pd.DataFrame(data)
+    # Apply rolling average to smoothen the data
+    # data.rolling(2, win_type='triang').mean()
     df = pd.concat([data.shift(lag) for lag in range(-lags,0)], axis=1)
     df.columns = ['lag {}'.format(-lag) for lag in range(-lags,0)]
-    data_combined = data.join(df)
+    data_combined = df.join(data)
     # Padded in the left, in order to synchronize with the original data
     data_combined = data_combined.fillna(0).values
     return data_combined

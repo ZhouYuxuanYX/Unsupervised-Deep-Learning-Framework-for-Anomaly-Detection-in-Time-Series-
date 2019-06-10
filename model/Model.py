@@ -1,6 +1,6 @@
-from keras.layers import Lambda, Input, Dense, Conv1D, MaxPooling1D, UpSampling1D, Flatten, Dropout
+from keras.layers import Lambda, Input, Dense, Conv1D, MaxPooling1D, UpSampling1D, Dropout
 from keras.models import Model, Sequential
-from keras.losses import mse, binary_crossentropy
+from keras.losses import mse
 from keras import backend as K
 import sys
 from model.utils import *
@@ -38,10 +38,9 @@ def _mro(cls):
         for base in cls.__bases__: mro.extend(_mro(base))
         return mro
 
-# remark: don't need to split the data set inside the function, unless it would not be flexible enough, especially for the case where the data set for online and offline
-# mode are totally differently split
-def seq2seq_mode(models, application_set, num_epochs, learning_rate, sliding_step, callbacks=None):
-
+# remark: don't need to split the data set inside the function, unless it would not be flexible enough,
+# especially for the case where the data set for online and offline mode are totally differently split
+def seq2seq_mode(models, application_set, num_epochs, learning_rate, sliding_step, model_type, callbacks=None):
     # define inference step
     def predict_sequence(input_sequence):
         history_sequence = input_sequence.copy()
@@ -57,6 +56,7 @@ def seq2seq_mode(models, application_set, num_epochs, learning_rate, sliding_ste
             pred_sequence[i, 0] = last_step_pred
 
             # add the next time step prediction to the history sequence
+            # After experiments, it's better not to truncate the first element of history sequence
             history_sequence = np.concatenate([history_sequence,
                                                 last_step_pred.reshape(1, 1,1)], axis=1)
 
@@ -71,7 +71,8 @@ def seq2seq_mode(models, application_set, num_epochs, learning_rate, sliding_ste
     predictions = [[], []] # the first element is prediction on training data, the second on unseen data
     # remark, if we really want to avoid overlapping, we can choose to loop with a step size equal to window size, but achtually we
     # don't need to bother, just choose the original time column, then it's fine
-    for i in range(int(len(application_set) / sliding_step) - 1):
+    # it's already prepadded
+    for i in range(sliding_step-1,len(application_set)-sliding_step,sliding_step):
         # each data set contains pairs of features and labels in 0 and 1 position
         x = application_set[i]  # Dimension from outer to inner
         x = np.expand_dims(x, 0) # restore the dimension after slicing
@@ -79,7 +80,8 @@ def seq2seq_mode(models, application_set, num_epochs, learning_rate, sliding_ste
         x_next = application_set[i + sliding_step]
         x_next = np.expand_dims(x_next, 0)
         # Using teacher forcing during training, which means during inference every previous ground truth is fed to the network
-        history = models[0].fit(x[:,:-1,:], x[:,-16:,:], epochs=num_epochs, verbose=1, shuffle=False,callbacks=CallBacks)
+        # Remark: keep the first points at training, the result is better than removing them
+        history = models[0].fit(x[:,:-1,:], x[:,-sliding_step:,:], epochs=num_epochs, verbose=1, shuffle=False,callbacks=CallBacks)
         train_losses.append(history.history['loss'])
         # Special case(one step ahead prediction): for MLP, each prediction itself is a (1,) array, after squeeze then can not be converted to list
         if sliding_step > 1:
@@ -107,7 +109,7 @@ def seq2seq_mode(models, application_set, num_epochs, learning_rate, sliding_ste
     return models, loss, predictions
 
 
-def online_mode(models, application_set, num_epochs, learning_rate, sliding_step, callbacks=None):
+def online_mode(models, application_set, num_epochs, learning_rate, sliding_step, model_type, callbacks=None):
     CallBacks = create_callbacks(callbacks)
     # opt = optimizers.Adam(lr=learning_rate)
     models[0].compile(optimizer="Adam", loss='MSE')
@@ -117,20 +119,19 @@ def online_mode(models, application_set, num_epochs, learning_rate, sliding_step
     predictions = [[], []] # the first element is prediction on training data, the second on unseen data
     # remark, if we really want to avoid overlapping, we can choose to loop with a step size equal to window size, but achtually we
     # don't need to bother, just choose the original time column, then it's fine
-    for i in range(int(len(application_set[0]) / sliding_step) - 1):
+    for i in range(0,len(application_set[0])-sliding_step,sliding_step):
         # each data set contains pairs of features and labels in 0 and 1 position
         x = application_set[0][i]  # Dimension from outer to inner
         x = np.expand_dims(x, 0)  # restore the dimension after slicing
         y = application_set[1][i]
         y = np.expand_dims(y, 0)
-        # extract next row of the lagged matrix, which is one step further than x at every column position
+        # extract next row of the lagged matrix, which is  sliding_step further than x at every column position
         x_next = application_set[0][i + sliding_step]
         x_next = np.expand_dims(x_next, 0)
         history = models[0].fit(x, y, epochs=num_epochs, verbose=1, shuffle=False,callbacks=CallBacks)
         train_losses.append(history.history['loss'])
         # Special case(one step ahead prediction): for MLP, each prediction itself is a (1,) array, after squeeze then can not be converted to list
         if sliding_step > 1:
-            pred = models[0].predict(x_next)
             predict = list(models[0].predict(x_next).squeeze())[:sliding_step]
             predictions[1].extend(predict)
             predict = list(models[0].predict(x).squeeze())[:sliding_step]
@@ -159,51 +160,58 @@ class neural_network_model(object):
     A processing interface:
 
     Subclasses must define:
-      - ``_build_model``, ''_format_input''
-      - either ``classify()`` or ``classify_many()`` (or both)
+      - "__build_model", "__format_input"
+      - may include "__init__"
 
-    Subclasses may define:
-      - either ``prob_classify()`` or ``prob_classify_many()`` (or both)
     """
     @staticmethod
-    def _build_model(lags, filter_size, prediction_steps=None):
+    def build_model(lags, filter_size, prediction_steps=None):
         """
         return: Keras model instance
         """
         raise NotImplementedError()
 
     @staticmethod
-    def _format_input(data, prediction_steps=None):
+    def format_input(data, prediction_steps=None):
         """
         return: formatted input suitable for specific network
         """
         raise NotImplementedError()
 
     @classmethod
-    def _train_and_predict(cls, params, train, general_settings, test_set=None, application_set=None):
+    def _train_and_predict(cls, params, train, general_settings):
         # submodels are e.g. encoder and decoder part of an autoencoder model, use * to recieve potentially multiple outputs
-        models = cls._build_model(params.lags, params.filter_size, general_settings.prediction_steps)
+
         results = [[],[]]
         # the first element is rolling loss, the second training loss
         losses =[[],[]]
 
         for file in range(len(train)):
-            print(file)
-            data = train[file]
-            data_combined = create_lagged_df(data, params.lags)
-            print("data input shape: ", data_combined.shape)
-            train_set = cls._format_input(data_combined, general_settings.prediction_steps)
-            if general_settings.model_type != "wavenet":
-                models, loss, predictions = online_mode(models, train_set, params.num_epochs, params.learning_rate, general_settings.prediction_steps, params.callbacks)
+            # put the build_model here, then for each file train from scratch
+            models = cls.build_model(params.lags, params.filter_size, general_settings.prediction_steps)
+            if len(train[file])<50:
+                results[0].append([0]*len(train[file]))
+                results[1].append([0]*len(train[file]))
+                losses[0].append(0)
+                losses[1].append(0)
             else:
-                models, loss, predictions = seq2seq_mode(models, train_set, params.num_epochs, params.learning_rate,
-                                                         general_settings.prediction_steps, params.callbacks)
-                # take the first column out, or averaging over the window is also ok, because of the overlapping
-                # numpy.squeeze() guarantees the dimension suitable for plot functions
+                print(file)
+                data = train[file]
+                data_combined = create_lagged_df(data, params.lags)
+                print("data input shape: ", data_combined.shape)
+                train_set = cls.format_input(data_combined, general_settings.prediction_steps)
+                if general_settings.model_type != "wavenet":
+                    models, loss, predictions = online_mode(models, train_set, params.num_epochs, params.learning_rate, general_settings.prediction_steps,  general_settings.model_type, params.callbacks)
+                else:
+                    models, loss, predictions = seq2seq_mode(models, train_set, params.num_epochs, params.learning_rate,
+                                                             general_settings.prediction_steps, general_settings.model_type, params.callbacks)
+                    # take the first column out, or averaging over the window is also ok, because of the overlapping
+                    # numpy.squeeze() guarantees the dimension suitable for plot functions
                 results[0].append(predictions[0][:, 0].squeeze())
                 results[1].append(predictions[1][:, 0].squeeze())
                 losses[0].append(loss[0])
                 losses[1].append(loss[1])
+
         return models, losses, results
 
     # def classify(self, featureset):
@@ -224,7 +232,7 @@ class Wavenet(neural_network_model):
         self.results = results
 
     @staticmethod
-    def _build_model(input_dim, filter_width, prediction_steps=None):
+    def build_model(input_dim, filter_width, prediction_steps=None):
         """
         return: Keras model instance
         """
@@ -251,7 +259,7 @@ class Wavenet(neural_network_model):
         def slice(x, seq_length):
             return x[:, -seq_length:, :]
 
-        pred_seq_train = Lambda(slice, arguments={'seq_length': 16})(x)
+        pred_seq_train = Lambda(slice, arguments={'seq_length': prediction_steps})(x)
 
         model = Model(history_seq, pred_seq_train)
 
@@ -259,14 +267,13 @@ class Wavenet(neural_network_model):
 
 
     @staticmethod
-    def _format_input(data, prediction_steps=None):
-        # flip the array, in order to get time step from past to current
-        data = np.flip(to_three_d_array(data),1)
+    def format_input(data, prediction_steps=None):
+        data = to_three_d_array(data)
         return data
 
     @classmethod
-    def train_and_predict(cls, params, train, validation_set, test_set=None, application_set=None):
-        models, losses, results = cls._train_and_predict(params, train, validation_set, test_set=None)
+    def train_and_predict(cls, params, train, general_settings):
+        models, losses, results = cls._train_and_predict(params, train, general_settings)
         return models, losses, results
 
 
@@ -278,7 +285,7 @@ class Convolutioanl_autoencoder(neural_network_model):
         self.results = results
 
     @staticmethod
-    def _build_model(lags, filter_size, prediction_steps=None):
+    def build_model(lags, filter_size, prediction_steps=None):
         """
         return: Keras model instance
         """
@@ -287,19 +294,23 @@ class Convolutioanl_autoencoder(neural_network_model):
         input_segment = Input(shape=(input_dim, 1))
 
         # Define encoder part
-        x = Conv1D(32, filter_size, activation='relu', padding='same')(input_segment)
+        x = Conv1D(128, filter_size, activation='relu', padding='same')(input_segment)
+        x = MaxPooling1D(2, padding='same')(x)
+        x = Conv1D(64, filter_size, activation='relu', padding='same')(x)
+        x = MaxPooling1D(2, padding='same')(x)
+        x = Conv1D(32, filter_size, activation='relu',  padding='same')(x)
         x = MaxPooling1D(2, padding='same')(x)
         x = Conv1D(16, filter_size, activation='relu', padding='same')(x)
-        x = MaxPooling1D(2, padding='same')(x)
-        x = Conv1D(4, filter_size, activation='relu',  padding='same')(x)
         encoded = MaxPooling1D(2, padding='same')(x)
 
         # Define decoder part
-        x = Conv1D(4, filter_size, activation='relu', padding='same')(encoded)
-        x = UpSampling1D(2)(x)
-        x = Conv1D(16, filter_size, activation='relu', padding='same')(x)
+        x = Conv1D(16, filter_size, activation='relu', padding='same')(encoded)
         x = UpSampling1D(2)(x)
         x = Conv1D(32, filter_size, activation='relu', padding='same')(x)
+        x = UpSampling1D(2)(x)
+        x = Conv1D(64, filter_size, activation='relu', padding='same')(x)
+        x = UpSampling1D(2)(x)
+        x = Conv1D(128, filter_size, activation='relu', padding='same')(x)
         x = UpSampling1D(2)(x)
         decoded = Conv1D(1, filter_size, activation='linear', padding= 'same')(x)
         autoencoder = Model(input_segment, decoded)
@@ -310,7 +321,7 @@ class Convolutioanl_autoencoder(neural_network_model):
         return (autoencoder, encoder)
 
     @staticmethod
-    def _format_input(data, prediction_steps=None):
+    def format_input(data, prediction_steps=None):
         """
         return: formatted input suitable for specific network
         """
@@ -322,8 +333,8 @@ class Convolutioanl_autoencoder(neural_network_model):
         return data_set
 
     @classmethod
-    def train_and_predict(cls, params, train, validation_set, test_set=None, application_set=None):
-        models, losses, results = cls._train_and_predict(params, train, validation_set, test_set=None)
+    def train_and_predict(cls, params, train, general_settings):
+        models, losses, results = cls._train_and_predict(params, train, general_settings)
         return models, losses, results
 
 class Multilayer_Perceptron(neural_network_model):
@@ -334,7 +345,7 @@ class Multilayer_Perceptron(neural_network_model):
         self.results = results
 
     @staticmethod
-    def _build_model(lags, filter_size, prediction_steps=1):
+    def build_model(lags, filter_size, prediction_steps=1):
         """
         return: Keras model instance
         """
@@ -347,17 +358,17 @@ class Multilayer_Perceptron(neural_network_model):
         return [mdl]
 
     @staticmethod
-    def _format_input(data, prediction_steps=1):
+    def format_input(data, prediction_steps=1):
         """
         return: formatted input suitable for specific network
         """
-        data_set = [data[:, prediction_steps:], data[:, 0:prediction_steps]]
+        data_set = [data[:, :-prediction_steps], data[:, -prediction_steps:]]
 
         return data_set
 
     @classmethod
-    def train_and_predict(cls, params, train, validation_set, test_set=None, application_set=None):
-        models, losses, results = cls._train_and_predict(params, train, validation_set, test_set=None)
+    def train_and_predict(cls, params, train, general_settings):
+        models, losses, results = cls._train_and_predict(params, train, general_settings)
         return models, losses, results
 
 class Variational_Autoecnoder(neural_network_model):
@@ -368,7 +379,7 @@ class Variational_Autoecnoder(neural_network_model):
         self.results = results
 
     @staticmethod
-    def _build_model(lags, filter_size, prediction_steps=None):
+    def build_model(lags, filter_size, prediction_steps=None):
         """
         return: Keras model instance
         """
@@ -421,7 +432,7 @@ class Variational_Autoecnoder(neural_network_model):
         return  (autoencoder, encoder)
 
     @staticmethod
-    def _format_input(data, prediction_steps=None):
+    def format_input(data, prediction_steps=None):
         """
         return: formatted input suitable for specific network
         """
@@ -433,6 +444,6 @@ class Variational_Autoecnoder(neural_network_model):
         return data_set
 
     @classmethod
-    def train_and_predict(cls, params, train, validation_set, test_set=None, application_set=None):
-        models, losses, results = cls._train_and_predict(params, train, validation_set, test_set=None)
+    def train_and_predict(cls, params, train, generall_settings):
+        models, losses, results = cls._train_and_predict(params, train, generall_settings)
         return models, losses, results

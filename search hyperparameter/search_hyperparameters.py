@@ -49,23 +49,23 @@ if __name__ == "__main__":
     #     launch_training_job(model_dir, "learning_rate", lr, params, general_settings)
 
     # epochs search
-    for epochs in [5 ,10]:
+    for epochs in [5]:
         params.num_epochs = epochs
         launch_training_job(model_dir, "num_epochs", epochs, params, general_settings)
 
 
-    # Aggregate metrics from args.parent_dir directory
-    # parent_dir = os.path.join(model_dir, "num_epochs_pred_step_1")
-    parent_dir = model_dir
-    for channel_name in general_settings.channels:
-        metrics = dict()
-        aggregate_metrics(parent_dir, metrics, channel_name)
-        table = metrics_to_table(metrics)
-
-        # Display the table to terminal
-        print(table)
-
-        # Save results in parent_dir/results.md
-        save_file = os.path.join(parent_dir, channel_name+"_results.md")
-        with open(save_file, 'w') as f:
-            f.write(table)
+    # # Aggregate metrics from args.parent_dir directory
+    # # parent_dir = os.path.join(model_dir, "num_epochs_pred_step_1")
+    # parent_dir = model_dir
+    # for channel_name in general_settings.channels:
+    #     metrics = dict()
+    #     aggregate_metrics(parent_dir, metrics, channel_name)
+    #     table = metrics_to_table(metrics)
+    #
+    #     # Display the table to terminal
+    #     print(table)
+    #
+    #     # Save results in parent_dir/results.md
+    #     save_file = os.path.join(parent_dir, channel_name+"_results.md")
+    #     with open(save_file, 'w') as f:
+    #         f.write(table)

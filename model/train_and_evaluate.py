@@ -1,6 +1,6 @@
 import warnings
 from model.Param import save_dict_to_json
-from Preprocesser import Preprocesser
+from Preprocess.Preprocesser import Preprocesser
 from model.visualizing import plot_loss, plot_prediction
 from model.Model import Convolutioanl_autoencoder, Multilayer_Perceptron, Variational_Autoecnoder, Wavenet
 import os
@@ -11,7 +11,7 @@ def mse_metric(train, predictions, prediction_steps):
     MSE = []
     for file in range(len(predictions[0])):
         # if the sliding_step is large, maybe the last few points on the end could not be covered(less than the sliding_step)
-        error = train[file][prediction_steps:prediction_steps+len(predictions[1][file])]-predictions[1][file]
+        error = train[file][prediction_steps:prediction_steps+len(predictions[0][file][prediction_steps:])]-predictions[0][file][prediction_steps:]
         # Median value is more stable than mean
         mse = np.median((error)**2)
         MSE.append(mse)

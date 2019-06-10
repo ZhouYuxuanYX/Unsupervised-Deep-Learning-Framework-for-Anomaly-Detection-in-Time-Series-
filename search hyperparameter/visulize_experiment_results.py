@@ -10,7 +10,7 @@ from anomaly_detection import anomaly_detection
 general_settings = Params.update(
     Path("C:/Users/zhouyuxuan/PycharmProjects/Masterarbeit/experiments/general_settings.json"))
 
-model_dir = os.path.join(general_settings.experiments_path, general_settings.model_type)
+model_dir = os.path.join(general_settings.experiments_path, "MLP")
 experiment_dir = os.path.join(model_dir, "num_epochs_pred_step_1")
 
 for channel_name in general_settings.channels:
@@ -20,5 +20,5 @@ for channel_name in general_settings.channels:
         predictions = np.load(os.path.join(experiment_dir, subdir, channel_name+"_predictions.npy"))
         train = np.load(os.path.join(experiment_dir, subdir,channel_name+"_train.npy"))
         plot_loss(loss)
-        plot_prediction(train, predictions, general_settings.prediction_steps)
+        plot_prediction(train, predictions, 5) # choose prediction steps
         anomaly_detection(train, predictions, general_settings.detection_mode)
