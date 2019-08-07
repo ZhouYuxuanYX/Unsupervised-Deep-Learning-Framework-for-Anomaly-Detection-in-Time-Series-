@@ -65,4 +65,5 @@ Hyperparameter settings(can be further optimized):
 
 ## References
 https://github.com/cs231n/cs231n.github.io
+
 https://github.com/numenta/NAB
