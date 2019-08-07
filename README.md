@@ -63,4 +63,6 @@ Hyperparameter settings(can be further optimized):
 
 ![Result analysis](Analysis.png)
 
+## References
+https://github.com/cs231n/cs231n.github.io
 
