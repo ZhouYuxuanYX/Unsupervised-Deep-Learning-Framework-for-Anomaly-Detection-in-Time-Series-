@@ -1,6 +1,11 @@
 # Unsupervised-Online-Deep-Learning-Framework-for-Anomaly-Detection-in-Time-Series-
 Unsupervised deep learning framework with both online(MLP: prediction-based, 1 D Conv and VAE: reconstruction-based, Wavenet: prediction-based) settings for anaomaly detection in time series data
 
+# Update
+The amp_tdm_loader is actually a modified version of the tdm_loader for our internal use only and I have just forgotten to remove this part.
+
+I would recommend you to try out this framework on the NAB dataset instead using the NAB dataset.py file. If you want to use this on TDM file, then you have to write read_data function yourself.
+
 ## Anomaly detection in time series data
 There are several common difficulties for anomaly detection in time series data:
 * Unbalanced data set: referring to the definition of anomaly, the anomaly data should always be the minority among the full data set as well as sampled. Indeed, the anomaly data are very rare in reality, forming together with the major normal data an extreme
